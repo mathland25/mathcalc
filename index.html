@@ -3750,7 +3750,24 @@ const Learn = (() => {
     h('span', { text: sheetErr ? '시트를 읽지 못했어요. 게시 설정을 확인하세요.' : sheetBusy ? '시트에서 가져오는 중…' : sheetAt ? '시트에서 ' + new Date(sheetAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) + '에 가져왔어요 · 시트 ' + (sheetInfo ? sheetInfo.rows + '줄 중 제출 코드 ' + sheetInfo.codes + '건, 연산 기록 ' + sheetInfo.calc + '건' + (sheetInfo.bad ? ', 읽지 못함 ' + sheetInfo.bad : '') : '') + ' (시트 반영은 몇 분 걸릴 수 있어요)' : '열면 시트에서 자동으로 가져와요' }),
     h('button', { class: 'btn sm', type: 'button', text: '시트에서 새로고침', onclick: () => sheetPull(true) }));
 
-  function viewTeacher() { return tstate.sel && TD.students[tstate.sel] ? teacherDetail(tstate.sel) : teacherClass(); }
+  /* 교사용 화면 비밀번호 (해시만 보관). 맞으면 이 탭을 닫을 때까지 다시 묻지 않는다 */
+  const T_PW_HASH = '491b381cf0f86a2d7af1aed75327a5de77ccf2497f8e156d582c109ee2f19eb9';
+  let tUnlocked = false; try { tUnlocked = sessionStorage.getItem('mathcalc-t-ok') === '1'; } catch (e) { }
+  const sha256hex = async s => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))).map(b => b.toString(16).padStart(2, '0')).join('');
+  function teacherLock() {
+    const pw = h('input', { class: 'in', type: 'password', id: 'tpw', autocomplete: 'current-password', placeholder: '비밀번호', 'aria-label': '교사용 비밀번호' });
+    const msg = h('div', { class: 'fieldmsg', role: 'status' });
+    const tryOpen = async () => {
+      let ok = false; try { ok = (await sha256hex('mathcalc|' + pw.value)) === T_PW_HASH; } catch (e) { msg.textContent = '이 브라우저에서는 비밀번호를 확인할 수 없어요.'; return; }
+      if (!ok) { msg.textContent = '비밀번호가 맞지 않아요.'; pw.value = ''; pw.focus(); return; }
+      tUnlocked = true; try { sessionStorage.setItem('mathcalc-t-ok', '1'); } catch (e) { } render();
+    };
+    pw.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); tryOpen(); } });
+    return h('div', { class: 'page teacher' }, tTop('교사용', () => { location.hash = ''; go(DB.cur ? 'home' : 'profiles'); }, '← 학생 화면'),
+      h('section', { class: 'card', style: 'margin-top:12px' }, h('h2', { class: 'h2', text: '선생님 비밀번호' }), pw, msg,
+        h('button', { class: 'btn primary big', type: 'button', text: '열기', onclick: tryOpen })));
+  }
+  function viewTeacher() { if (!tUnlocked) return teacherLock(); return tstate.sel && TD.students[tstate.sel] ? teacherDetail(tstate.sel) : teacherClass(); }
 
   function teacherClass() {
     const all = Object.keys(TD.students).map(k => ({ key: k, rep: TD.students[k].rep, an: analyze(TD.students[k].rep) }));
