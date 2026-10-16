@@ -3654,7 +3654,7 @@ const Learn = (() => {
   const TKEY = 'mathcalc-teacher-v2';
   let TD = { v: 2, students: {}, moves: {}, hidden: {} };
   let tstate = { sel: null, sort: 'name', tab: 'students', cls: '전체', showHidden: false };
-  let sheetBusy = false, sheetAt = 0, sheetErr = false;
+  let sheetBusy = false, sheetAt = 0, sheetErr = false, sheetInfo = null;
   function tload() { try { const raw = localStorage.getItem(TKEY); if (raw) { const o = JSON.parse(raw); if (o && o.students) TD = o; } } catch (e) { } TD.moves = TD.moves || {}; TD.hidden = TD.hidden || {}; rekeyTD(); }
   function tsave() { try { localStorage.setItem(TKEY, JSON.stringify(TD)); } catch (e) { toast('이 화면에서는 저장되지 않아요. 표 복사로 따로 보관해 주세요.'); } }
 
@@ -3705,7 +3705,7 @@ const Learn = (() => {
     sheetBusy = true; sheetErr = false; if (manual) softRender();
     try {
       const r = await fetch(SHEET_CSV + (SHEET_CSV.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' }); if (!r.ok) throw new Error(r.status);
-      const res = await importCodes(await r.text()); sheetAt = Date.now(); sheetBusy = false; softRender();
+      const txt = await r.text(), res = await importCodes(txt); sheetAt = Date.now(); sheetInfo = { codes: (txt.match(/GN2z?\.[A-Za-z0-9_-]+/g) || []).length, calc: res.calc, bad: res.bad, rows: Math.max(0, txt.split('\n').length - 1) }; sheetBusy = false; softRender();
       if (manual) toast('연산 기록 ' + res.calc + '건 확인 · 새 학생 ' + res.add + '명 · 갱신 ' + res.upd + '명');
     } catch (e) { sheetBusy = false; sheetErr = true; softRender(); if (manual) toast('시트를 읽지 못했어요. 게시 설정을 확인해 주세요'); }
   }
@@ -3748,7 +3748,7 @@ const Learn = (() => {
   const tTop = (title, backFn, backLabel) => h('header', { class: 'top' }, h('div', { class: 'tback' }, h('button', { class: 'btn ghost sm', onclick: backFn, text: backLabel }), h('b', { class: 'ttitle', text: title })), brand(false));
   const copyText = (text, okMsg) => { const ok = () => toast(okMsg || '복사했어요'), fail = () => toast('복사하지 못했어요. 직접 선택해 복사해 주세요.'); try { navigator.clipboard.writeText(text).then(ok, fail); } catch (e) { fail(); } };
   const sheetBar = () => h('div', { class: 'syncline ' + (sheetErr ? 'err' : sheetBusy || sheetAt ? 'on' : '') }, h('span', { class: 'dot' }),
-    h('span', { text: sheetErr ? '시트를 읽지 못했어요. 게시 설정을 확인하세요.' : sheetBusy ? '시트에서 가져오는 중…' : sheetAt ? '시트에서 ' + new Date(sheetAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) + '에 가져왔어요 · 열 때 자동으로 읽어요' : '열면 시트에서 자동으로 가져와요' }),
+    h('span', { text: sheetErr ? '시트를 읽지 못했어요. 게시 설정을 확인하세요.' : sheetBusy ? '시트에서 가져오는 중…' : sheetAt ? '시트에서 ' + new Date(sheetAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) + '에 가져왔어요 · 시트 ' + (sheetInfo ? sheetInfo.rows + '줄 중 제출 코드 ' + sheetInfo.codes + '건, 연산 기록 ' + sheetInfo.calc + '건' + (sheetInfo.bad ? ', 읽지 못함 ' + sheetInfo.bad : '') : '') + ' (시트 반영은 몇 분 걸릴 수 있어요)' : '열면 시트에서 자동으로 가져와요' }),
     h('button', { class: 'btn sm', type: 'button', text: '시트에서 새로고침', onclick: () => sheetPull(true) }));
 
   function viewTeacher() { return tstate.sel && TD.students[tstate.sel] ? teacherDetail(tstate.sel) : teacherClass(); }
