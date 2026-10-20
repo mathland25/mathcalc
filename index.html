@@ -426,6 +426,9 @@ body { padding-top: env(safe-area-inset-top, 0px); }
 .tile { min-height: 72px; }
 .tab { min-height: 60px; }
 .sentnote { text-align: center; margin: 10px 0 0; }
+.tw { display: flex; flex-direction: column; gap: 4px; }
+.taught { min-height: 44px; border-radius: 10px; border: 1.5px dashed var(--line2); background: var(--paper); font-weight: 600; color: var(--ink2); }
+.taught.on { border-style: solid; border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
 .in { min-height: 50px; font-size: 1rem; }
 @media (max-width: 480px) {
   .top .brand-name { display: none; }
@@ -2779,7 +2782,7 @@ const Learn = (() => {
 
   function newProfile(name, cls, sem) {
     return { id: 'p' + Date.now().toString(36) + rnd(100, 999), name: name.replace(/\s+/g, '') || '학생', cls: cls || '', sem, color: rnd(0, 5),
-      created: today(), size: 12, units: {}, wrong: [], log: {}, missionDone: {} };
+      created: today(), size: 12, taught: {}, units: {}, wrong: [], log: {}, missionDone: {} };
   }
   const blank = () => ({ box: 0, seen: 0, right: 0, last: null, due: null, hist: [], upd: 0 });
   const ust = (p, id) => p.units[id] || blank();                     // 읽기용
@@ -2793,6 +2796,10 @@ const Learn = (() => {
     return b <= 1 ? 1 : b <= 3 ? 2 : 3;
   }
 
+  /* 배운 단원: 지난 학기 단원, 내 학기에서 '배웠어요'를 누른 단원, 이미 풀어 본 단원만 오늘의 미션에 나온다 */
+  const taughtOk = (p, u) => u.sem < p.sem || !!(p.taught && p.taught[u.id]) || ust(p, u.id).box > 0;
+  const missionReady = p => UNITS.some(u => u.sem <= p.sem && taughtOk(p, u));
+  const curTaught = p => UNITS.some(u => u.sem === p.sem && taughtOk(p, u));
   /* 미션 구성 개수: {nw: 내 학기, rv: 누적 복습, wr: 오답} */
   function plan(p) {
     const size = p.size || 12;
@@ -2801,6 +2808,7 @@ const Learn = (() => {
     let nw = Math.round((size - wr) / 2);
     let rv = size - wr - nw;
     if (p.sem === 0) { nw += rv; rv = 0; }           // 초1-1 학생은 이전 학기가 없다
+    if (!curTaught(p)) { rv += nw; nw = 0; }         // 내 학기에서 배운 단원이 아직 없으면 지난 단원 복습으로
     return { nw, rv, wr, size };
   }
 
@@ -2819,7 +2827,7 @@ const Learn = (() => {
   /* 오늘의 미션: 내 학기 단원 + 지난 단원 복습 + 오답 단원 */
   function buildMission(p, t = today()) {
     const { nw, rv, wr } = plan(p);
-    const pool = UNITS.filter(u => u.sem <= p.sem);
+    const pool = UNITS.filter(u => u.sem <= p.sem && taughtOk(p, u));
     const cur = pool.filter(u => u.sem === p.sem);
     const items = [];
     const add = (u, kind) => items.push({ unit: u.id, lv: levelFor(p, u), kind });
@@ -2855,7 +2863,7 @@ const Learn = (() => {
     // 부족하면 내 학기/복습으로 채운다
     const size = p.size || 12;
     const fillPool = pool.length ? pool : UNITS;
-    while (items.length < size) add(pick(cur.length ? cur : fillPool), 'new');
+    while (items.length < size) add(pick(cur.length && p.sem === 0 ? cur : fillPool), cur.length && p.sem === 0 ? 'new' : 'review');
     return shuffle(items).slice(0, size);
   }
 
@@ -2916,7 +2924,7 @@ const Learn = (() => {
   const totals = p => { let s = 0, r = 0; Object.values(p.log).forEach(L => { s += L.solved; r += L.right; }); return { solved: s, right: r }; };
   const whenText = (due, t = today()) => { const d = dayDiff(due, t); return d <= 0 ? '오늘 복습' : d === 1 ? '내일 복습' : d + '일 뒤 복습'; };
 
-  return { INTERVAL, BOX_NAMES, today, addDays, dayDiff, unitById, newProfile, ust, isDue, levelFor, plan, buildMission, unitSession, wrongSession, finish, streak, recent, semStats, dueUnits, totals, whenText };
+  return { taughtOk, missionReady, curTaught, INTERVAL, BOX_NAMES, today, addDays, dayDiff, unitById, newProfile, ust, isDue, levelFor, plan, buildMission, unitSession, wrongSession, finish, streak, recent, semStats, dueUnits, totals, whenText };
 })();
 
 ;
@@ -3229,10 +3237,13 @@ const Learn = (() => {
       h('h1', { class: 'mtitle' }, '오늘의 미션', done ? h('span', { class: 'done', text: '완료' }) : null),
       h('p', { class: 'msub', text: pl.size + '문제 · 약 ' + Math.round(pl.size * 0.7) + '분' }),
       h('ul', { class: 'plan' },
-        h('li', {}, h('i', { class: 'k new' }), '내 학기 ', h('b', { text: pl.nw + '문제' })),
+        pl.nw ? h('li', {}, h('i', { class: 'k new' }), '배운 단원 ', h('b', { text: pl.nw + '문제' })) : null,
         pl.rv ? h('li', {}, h('i', { class: 'k rev' }), '지난 단원 복습 ', h('b', { text: pl.rv + '문제' })) : null,
         pl.wr ? h('li', {}, h('i', { class: 'k wr' }), '틀렸던 유형 ', h('b', { text: pl.wr + '문제' })) : null),
-      h('button', { class: 'btn primary big', onclick: startMission, text: done ? '한 번 더 풀기' : '시작하기' }),
+      Learn.missionReady(p) ? h('button', { class: 'btn primary big', onclick: startMission, text: done ? '한 번 더 풀기' : '시작하기' })
+        : h('button', { class: 'btn primary big', onclick: () => go('map', { sem: p.sem }), text: '배운 단원 고르러 가기' }),
+      !Learn.missionReady(p) ? h('p', { class: 'note', text: '오늘의 미션은 배운 단원에서만 나와요. 먼저 단원 고르기에서 배운 단원에 "배웠어요"를 눌러 주세요.' })
+        : !Learn.curTaught(p) ? h('p', { class: 'note', text: '내 학기에서 배운 단원을 고르면 그 단원도 미션에 나와요. 단원 고르기에서 "배웠어요"를 눌러 주세요.' }) : null,
       todayLog.solved ? h('p', { class: 'today', text: '오늘 ' + todayLog.solved + '문제 풀었어요 (정답 ' + todayLog.right + ')' }) : null);
 
     const dueCard = due.length ? h('section', { class: 'card' },
@@ -3293,9 +3304,14 @@ const Learn = (() => {
           h('span', { class: 'bar sm-bar' }, h('i', { style: 'width:' + pct(x.avg) + '%' })), h('span', { class: 'sm-c', text: x.learned + '/' + x.total })),
         h('div', { class: 'tiles' }, us.map(u => {
           const st = Learn.ust(p, u.id), due = st.box > 0 && Learn.isDue(p, u, t);
-          return h('button', { class: 'tile' + (due ? ' due' : ''), onclick: () => startSession('unit', Learn.unitSession(p, u.id, 10), u.name) },
+          const tile = h('button', { class: 'tile' + (due ? ' due' : ''), onclick: () => startSession('unit', Learn.unitSession(p, u.id, 10), u.name) },
             stack(st.box), h('span', { class: 'tl-t' }, h('b', { text: u.name }), h('small', { text: u.desc }),
               h('em', { text: st.box === 0 ? '아직 안 풀었어요' : Learn.BOX_NAMES[st.box] + ' · ' + Learn.whenText(st.due, t) })));
+          if (s !== p.sem) return tile;
+          const on = !!(p.taught && p.taught[u.id]);
+          const tg = h('button', { type: 'button', class: 'taught' + (on ? ' on' : ''), 'aria-pressed': on ? 'true' : 'false', text: on ? '✓ 배웠어요 (미션에 나와요)' : '아직 안 배웠어요 · 누르면 배운 단원',
+            onclick: () => { p.taught = p.taught || {}; if (on) delete p.taught[u.id]; else p.taught[u.id] = 1; save(); go('map', { sem: p.sem }); } });
+          return h('div', { class: 'tw' }, tile, tg);
         })));
       if (s === focus) focusEl = det;
       wrap.append(det);
