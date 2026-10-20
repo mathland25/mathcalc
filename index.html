@@ -426,6 +426,12 @@ body { padding-top: env(safe-area-inset-top, 0px); }
 .tile { min-height: 72px; }
 .tab { min-height: 60px; }
 .sentnote { text-align: center; margin: 10px 0 0; }
+.ptimer { font-weight: 800; font-variant-numeric: tabular-nums; padding: 3px 10px; border-radius: 99px; background: var(--blue-soft); color: var(--blue); white-space: nowrap; }
+.ptimer.warn { background: var(--red-soft, #fbe3e0); color: var(--red); }
+.timeup { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; padding: 4px 6px 4px 12px; border-radius: 12px; background: var(--gold-soft, #fdf0cf); font-weight: 700; font-size: .92rem; }
+.timeup .btn { min-height: 40px; padding: 2px 12px; flex: none; }
+.seg button { white-space: nowrap; }
+@media (max-width: 400px) { .seg button { padding-inline: 10px; } }
 .tw { display: flex; flex-direction: column; gap: 4px; }
 .taught { min-height: 44px; border-radius: 10px; border: 1.5px dashed var(--line2); background: var(--paper); font-weight: 600; color: var(--ink2); }
 .taught.on { border-style: solid; border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
@@ -2782,7 +2788,7 @@ const Learn = (() => {
 
   function newProfile(name, cls, sem) {
     return { id: 'p' + Date.now().toString(36) + rnd(100, 999), name: name.replace(/\s+/g, '') || '학생', cls: cls || '', sem, color: rnd(0, 5),
-      created: today(), size: 12, taught: {}, units: {}, wrong: [], log: {}, missionDone: {} };
+      created: today(), size: 8, timer: 5, taught: {}, units: {}, wrong: [], log: {}, missionDone: {} };
   }
   const blank = () => ({ box: 0, seen: 0, right: 0, last: null, due: null, hist: [], upd: 0 });
   const ust = (p, id) => p.units[id] || blank();                     // 읽기용
@@ -3376,6 +3382,8 @@ const Learn = (() => {
       p.name = nm; p.cls = cl; p.sem = sem; save(); toast('저장했어요'); go('settings');
     } });
     const sizes = h('div', { class: 'seg', role: 'group', 'aria-label': '미션 문제 수' }, [8, 12, 16].map(n_ => h('button', { class: (p.size || 12) === n_ ? 'on' : '', 'aria-pressed': (p.size || 12) === n_ ? 'true' : 'false', text: n_ + '문제', onclick: () => { p.size = n_; save(); go('settings'); } })));
+    const tm = p.timer != null ? p.timer : 5;
+    const timers = h('div', { class: 'seg', role: 'group', 'aria-label': '타이머 시간' }, [[0, '끔'], [3, '3분'], [5, '5분'], [7, '7분'], [10, '10분']].map(([m, l]) => h('button', { class: tm === m ? 'on' : '', 'aria-pressed': tm === m ? 'true' : 'false', text: l, onclick: () => { p.timer = m; save(); go('settings'); } })));
     const code = h('textarea', { class: 'in code', readonly: true, rows: '3', 'aria-label': '백업 코드' });
     const mkCode = () => { try { return encode(JSON.stringify({ v: 1, cur: DB.cur, profiles: DB.profiles })); } catch (e) { return ''; } };
     code.value = mkCode();
@@ -3401,6 +3409,9 @@ const Learn = (() => {
           h('p', { class: 'note', text: '학기를 올리면 오늘의 미션에 새 단원이 들어오고, 이전 단원은 복습으로 돌아요. 이름이나 반을 바꾸면 선생님 화면에서 다른 학생으로 보일 수 있으니, 반이 바뀐 경우에만 고쳐 주세요.' }), saveInfo),
         h('div', { class: 'col' },
           h('section', { class: 'card' }, h('h2', { class: 'h2', text: '오늘의 미션 크기' }), sizes),
+          h('section', { class: 'card' }, h('h2', { class: 'h2', text: '수업 타이머' }),
+            h('p', { class: 'note', text: '문제를 풀 때 남은 시간이 보여요. 시간이 끝나도 강제로 멈추지 않고 안내만 해요.' }), timers,
+            h('div', { class: 'row' }, h('button', { class: 'btn', text: '수업 모드로 맞추기 (5분 · 8문제)', onclick: () => { p.timer = 5; p.size = 8; save(); toast('수업 모드로 맞췄어요'); go('settings'); } }))),
           h('section', { class: 'card' }, h('h2', { class: 'h2', text: '기록 백업' }), h('p', { class: 'note', text: '브라우저 데이터가 지워져도 이 코드로 되돌릴 수 있어요. 학생 이름이 들어 있으니 필요한 사람에게만 보여 주세요.' }), code, h('div', { class: 'row' }, copy), h('div', { class: 'lab', text: '복원' }), restoreIn, h('div', { class: 'row' }, restore)),
           h('section', { class: 'card' }, h('h2', { class: 'h2', text: '학생' }), h('div', { class: 'row' }, h('button', { class: 'btn', text: '다른 학생으로 바꾸기', onclick: () => go('profiles') }), del)))));
   }
@@ -3408,7 +3419,8 @@ const Learn = (() => {
 /* ================= 연습 세션 ================= */
   function startSession(mode, items, title) {
     if (!items.length) { toast('풀 문제가 없어요'); return; }
-    S = { mode, items, idx: 0, results: [], title, streak: 0, seen: new Set(), cur: null, ui: null };
+    const pp = me(), mins = pp && pp.timer != null ? pp.timer : 5;
+    S = { mode, items, idx: 0, results: [], title, streak: 0, seen: new Set(), cur: null, ui: null, t0: Date.now(), limit: mins * 60, timeUp: false };
     go('practice');
   }
   function genProblem(item) {
@@ -3424,8 +3436,11 @@ const Learn = (() => {
     const ui = S.ui = {};
     const root = h('section', { class: 'practice' });
     ui.kind = h('span', { class: 'chip kind' }); ui.uname = h('span', { class: 'uname' }); ui.count = h('span', { class: 'pcount' });
+    ui.timer = h('span', { class: 'ptimer', role: 'timer', hidden: !S.limit });
     ui.dots = h('div', { class: 'dots', 'aria-hidden': 'true' }, S.items.map(() => h('i', { class: 'dot' })));
-    root.append(h('header', { class: 'ph' }, h('button', { class: 'btn ghost sm', onclick: askQuit, text: '그만하기' }), h('div', { class: 'ph-mid' }, ui.kind, ui.uname), ui.count), ui.dots);
+    root.append(h('header', { class: 'ph' }, h('button', { class: 'btn ghost sm', onclick: askQuit, text: '그만하기' }), h('div', { class: 'ph-mid' }, ui.kind, ui.uname), ui.timer, ui.count), ui.dots,
+      ui.timeup = h('div', { class: 'timeup', hidden: true, role: 'status' }, h('span', { text: '⏰ 시간 끝! 이 문제까지 풀고 마쳐요' }),
+        h('button', { type: 'button', class: 'btn sm primary', text: '지금 마치기', onclick: () => { if (S.results.length) finishSession(); else toast('한 문제라도 풀고 마쳐 주세요'); } })));
 
     ui.pno = h('span', { class: 'pno' }); ui.q = h('div', { class: 'q' }); ui.exprBox = h('div', { class: 'exprbox' });
     ui.mark = h('span', { html: '<svg class="mark" viewBox="0 0 100 100" aria-hidden="true"></svg>' }).firstChild;
@@ -3454,6 +3469,17 @@ const Learn = (() => {
     root.append(h('div', { class: 'pbody' }, h('div', { class: 'left' }, ui.card, ui.dock), ui.memo));
     setTimeout(() => { memo = Memo(ui.surface, canvas); loadProblem(); }, 0);
     keyHandler = onKey; document.addEventListener('keydown', keyHandler);
+    if (S.limit) {   // 수업용 타이머: 시간이 끝나도 강제로 멈추지 않고 안내만 한다
+      const fmt = v => Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0');
+      const tick = () => {
+        if (!S || S.ui !== ui) { clearInterval(tid); return; }
+        const left = S.limit - Math.round((Date.now() - S.t0) / 1000);
+        ui.timer.textContent = '⏱ ' + (left > 0 ? fmt(left) : '시간 끝');
+        ui.timer.classList.toggle('warn', left <= 30);
+        if (left <= 0 && !S.timeUp) { S.timeUp = true; ui.timeup.hidden = false; try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) { } }
+      };
+      const tid = setInterval(tick, 1000); tick();
+    }
     return root;
   }
   function setTool(color, erase) {
@@ -3578,7 +3604,7 @@ const Learn = (() => {
     const deltas = Learn.finish(p, S.results, t);
     if (S.mode === 'mission' && S.results.length >= S.items.length) p.missionDone[t] = true;
     save(); autoSubmit(p);
-    const res = { mode: S.mode, title: S.title, results: S.results, deltas, total: S.items.length, items: S.items };
+    const res = { mode: S.mode, title: S.title, results: S.results, deltas, total: S.items.length, items: S.items, sec: Math.round((Date.now() - S.t0) / 1000), limit: S.limit };
     S = null; go('result', res);
   }
 
@@ -3600,7 +3626,7 @@ const Learn = (() => {
       else if (p.wrong.length) startSession('wrong', Learn.wrongSession(p, 10), '오답 다시 풀기'); else go('home');
     };
     return h('div', { class: 'page result' }, h('div', { class: 'ph-top' }, brand(false)),
-      h('section', { class: 'card sheet' }, h('div', { class: 'eyebrow', text: R.title + ' 결과' }), score, h('p', { class: 'msg', text: msg }), marks),
+      h('section', { class: 'card sheet' }, h('div', { class: 'eyebrow', text: R.title + ' 결과' }), score, h('p', { class: 'msg', text: msg }), R.sec ? h('p', { class: 'note', style: 'text-align:center;margin:0 0 8px', text: '걸린 시간 ' + Math.floor(R.sec / 60) + '분 ' + (R.sec % 60) + '초' + (R.limit && R.sec > R.limit ? ' (정해 둔 시간보다 조금 더 걸렸어요)' : '') }) : null, marks),
       h('div', { class: 'grid2' },
         h('section', { class: 'card' }, h('h2', { class: 'h2', text: '단원이 이렇게 쌓였어요' }), changes),
         wrongs.length ? h('section', { class: 'card' }, h('h2', { class: 'h2', text: '틀린 문제 ' + wrongs.length + '개' }), h('p', { class: 'note', text: R.mode === 'wrong' ? '아직 노트에 남아 있어요. 다시 도전해 봐요.' : '오답노트에 저장했어요.' }),
