@@ -430,6 +430,12 @@ body { padding-top: env(safe-area-inset-top, 0px); }
 .ptimer.warn { background: var(--red-soft, #fbe3e0); color: var(--red); }
 .timeup { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; padding: 4px 6px 4px 12px; border-radius: 12px; background: var(--gold-soft, #fdf0cf); font-weight: 700; font-size: .92rem; }
 .timeup .btn { min-height: 40px; padding: 2px 12px; flex: none; }
+.conceptlink { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 16px 18px; min-height: 72px; border-radius: 16px; background: var(--blue); color: var(--on-blue); text-decoration: none; box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+.conceptlink .cl-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.conceptlink b { font-size: 1.08rem; }
+.conceptlink small { opacity: .88; }
+.conceptlink .cl-go { flex: none; font-weight: 800; background: rgba(255,255,255,.18); padding: 8px 14px; border-radius: 99px; }
+.conceptlink:active { transform: translateY(1px); }
 .seg button { white-space: nowrap; }
 @media (max-width: 400px) { .seg button { padding-inline: 10px; } }
 .tw { display: flex; flex-direction: column; gap: 4px; }
@@ -3279,7 +3285,7 @@ const Learn = (() => {
       h('div', { class: 'spark', role: 'img', 'aria-label': '최근 14일 푼 문제 수' }, rec.map(r => h('span', { class: 'sp' + (r.day === t ? ' today' : ''), title: r.day.slice(5) + ' · ' + r.solved + '문제' }, h('i', { style: 'height:' + (r.solved ? Math.max(6, r.solved / mx * 100) : 2) + '%' })))),
       h('div', { class: 'spark-l' }, h('span', { text: '14일 전' }), h('span', { text: '오늘' })));
 
-    return h('div', { class: 'page home' }, topbar(p), storageNote(), h('div', { class: 'grid' }, mission, h('div', { class: 'col' }, stageCard(p), dueCard, stacked), log, submitCard(p)));
+    return h('div', { class: 'page home' }, topbar(p), storageNote(), h('div', { class: 'grid' }, mission, h('div', { class: 'col' }, stageCard(p), dueCard, stacked), log, submitCard(p), h('div', { class: 'wide' }, conceptLink(true))));
   }
 
     /* ================= 단원 고르기 ================= */
@@ -3609,6 +3615,10 @@ const Learn = (() => {
   }
 
   /* ================= 결과 ================= */
+  /* 개념 탐구 노트(다른 앱)로 가는 링크 */
+  const CONCEPT_URL = 'https://mathland25.github.io/mathconcept/';
+  const conceptLink = home => h('a', { class: 'conceptlink', href: CONCEPT_URL },
+    h('span', { class: 'cl-t' }, h('b', { text: home ? '개념 탐구 노트' : '연산 연습 끝! 이제 개념 탐구 노트로' }), h('small', { text: '오늘 배운 개념을 스스로 탐구해 봐요' })), h('span', { class: 'cl-go', text: '가기 →' }));
   function viewResult(p) {
     const R = vparam, n = R.results.length, right = R.results.filter(r => r.ok).length, acc = n ? right / n : 0;
     const msg = acc === 1 ? '모두 맞혔어요! 차곡차곡 단단히 쌓였어요.' : acc >= 0.8 ? '잘했어요. 틀린 문제는 오답노트에 모아 뒀어요.' : acc >= 0.5 ? '좋은 출발이에요. 오답노트에서 한 번 더 풀어 봐요.' : '괜찮아요. 같은 단원을 곧 다시 만나요.';
@@ -3632,7 +3642,7 @@ const Learn = (() => {
         wrongs.length ? h('section', { class: 'card' }, h('h2', { class: 'h2', text: '틀린 문제 ' + wrongs.length + '개' }), h('p', { class: 'note', text: R.mode === 'wrong' ? '아직 노트에 남아 있어요. 다시 도전해 봐요.' : '오답노트에 저장했어요.' }),
           h('div', { class: 'wlist tight' }, wrongs.slice(0, 5).map(w => h('div', { class: 'wrow' }, w.problem.q ? h('div', { class: 'q', text: w.problem.q }) : null, renderExpr(w.problem, 'ans').el))),
           wrongs.length > 5 ? h('p', { class: 'note', text: '나머지는 오답노트에서 볼 수 있어요.' }) : null) : h('section', { class: 'card' }, h('h2', { class: 'h2', text: '틀린 문제가 없어요' }), h('p', { class: 'note', text: '내일은 복습 일정에 맞춰 지난 단원이 다시 나와요.' }))),
-      h('p', { class: 'note sentnote', id: 'sent-note', text: sentText() }), h('div', { class: 'actions' }, h('button', { class: 'btn primary big', onclick: again, text: R.mode === 'wrong' ? '남은 오답 다시 풀기' : '한 세트 더' }), h('button', { class: 'btn big', onclick: () => go('home'), text: '홈으로' })));
+      h('p', { class: 'note sentnote', id: 'sent-note', text: sentText() }), h('div', { class: 'actions' }, h('button', { class: 'btn primary big', onclick: again, text: R.mode === 'wrong' ? '남은 오답 다시 풀기' : '한 세트 더' }), h('button', { class: 'btn big', onclick: () => go('home'), text: '홈으로' })), conceptLink());
   }
 
     /* ================= 제출 코드 (학생 → 선생님) ================= */
