@@ -368,13 +368,20 @@ sup .slot { font-size: .9em; }
 .tstats small { color: var(--ink2); }
 .sortseg { align-self: flex-start; align-items: center; flex-wrap: wrap; }
 .sortseg .sl { padding: 0 12px; font-size: .82rem; color: var(--ink2); font-weight: 600; }
-.tscroll { padding: 6px 8px; overflow-x: auto; }
+.tscroll { padding: 6px 8px 6px 0; overflow-x: auto; }
+.ttable th:first-child, .ttable td:first-child { padding-left: 16px; }
 .ttable { width: 100%; border-collapse: collapse; min-width: 640px; }
 .ttable th { text-align: left; font-size: .8rem; color: var(--ink2); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .ttable td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; font-variant-numeric: tabular-nums; }
 .ttable tbody tr { cursor: pointer; }
 .ttable tbody tr:last-child td { border-bottom: 0; }
 .ttable tbody tr:hover { background: var(--paper2); }
+/* 표를 옆으로 밀어도 학생 이름 칸은 고정 */
+.ttable th:first-child, .ttable td:first-child { position: sticky; left: 0; z-index: 2; background: var(--paper, #fff); box-shadow: 1px 0 0 var(--line); }
+.ttable tbody tr:hover td:first-child { background: var(--paper2); }
+.ttable td.last { font-weight: 700; white-space: nowrap; }
+.ttable td:first-child { max-width: 120px; white-space: nowrap; }
+.ttable td, .ttable .tname { white-space: nowrap; }
 .tname { display: inline-flex; align-items: center; gap: 8px; text-align: left; }
 .dim { color: var(--ink2); }
 .pill { display: inline-block; padding: 1px 9px; margin: 1px 4px 1px 0; border-radius: 99px; font-size: .78rem; font-weight: 600; background: var(--paper2); border: 1px solid var(--line); color: var(--ink2); white-space: nowrap; }
@@ -3826,7 +3833,7 @@ const Learn = (() => {
     const hiddenN = all.filter(r => TD.hidden[r.key]).length;
     const clsOf = r => r.rep.cls || '반 없음';
     const byName = (a, b) => a.rep.name.localeCompare(b.rep.name, 'ko');
-    const sorters = { name: byName, attn: (a, b) => (b.an.attn - a.an.attn) || byName(a, b), acc: (a, b) => ((a.an.acc === null ? 2 : a.an.acc) - (b.an.acc === null ? 2 : b.an.acc)) || byName(a, b) };
+    const sorters = { name: byName, attn: (a, b) => (b.an.attn - a.an.attn) || byName(a, b), recent: (a, b) => ((a.an.since === null ? 1e9 : a.an.since) - (b.an.since === null ? 1e9 : b.an.since)) || byName(a, b), acc: (a, b) => ((a.an.acc === null ? 2 : a.an.acc) - (b.an.acc === null ? 2 : b.an.acc)) || byName(a, b) };
     const rows = all.filter(r => tstate.showHidden || !TD.hidden[r.key]).sort((a, b) => ((clsOf(a) === '반 없음') - (clsOf(b) === '반 없음')) || clsOf(a).localeCompare(clsOf(b), 'ko', { numeric: true }) || (sorters[tstate.sort] || byName)(a, b));
 
     const ta = h('textarea', { class: 'in code', rows: '3', id: 't-in', placeholder: '학생이 보낸 제출 코드를 붙여 넣으세요. 여러 명이면 줄을 바꿔 한꺼번에 붙여도 돼요.', 'aria-label': '제출 코드' });
@@ -3866,21 +3873,21 @@ const Learn = (() => {
         copyText([head.join('\t')].concat(lines).join('\n'), '표를 복사했어요. 엑셀·한셀에 붙여 넣으세요');
       } })));
     if (tstate.tab === 'students') {
-      wrap.append(h('div', { class: 'seg sortseg', role: 'group', 'aria-label': '정렬' }, h('span', { class: 'sl', text: '정렬' }), [['name', '이름'], ['attn', '살펴볼 학생 먼저'], ['acc', '정답률 낮은 순']].map(([k, l]) => h('button', { class: tstate.sort === k ? 'on' : '', 'aria-pressed': tstate.sort === k ? 'true' : 'false', text: l, onclick: () => { tstate.sort = k; render(); } }))));
+      wrap.append(h('div', { class: 'seg sortseg', role: 'group', 'aria-label': '정렬' }, h('span', { class: 'sl', text: '정렬' }), [['name', '이름'], ['recent', '최근 학습 순'], ['attn', '살펴볼 학생 먼저'], ['acc', '정답률 낮은 순']].map(([k, l]) => h('button', { class: tstate.sort === k ? 'on' : '', 'aria-pressed': tstate.sort === k ? 'true' : 'false', text: l, onclick: () => { tstate.sort = k; render(); } }))));
       (tstate.cls === '전체' ? clsList : [tstate.cls]).forEach(c => {
         const g = shown.filter(r => clsOf(r) === c); if (!g.length) return;
         const seen = g.reduce((s, r) => s + r.an.seen, 0), right = g.reduce((s, r) => s + r.an.right, 0), done = g.reduce((s, r) => s + r.an.done, 0);
         wrap.append(h('section', { class: 'card', style: 'margin-top:12px' }, h('div', { class: 'row', style: 'margin:0 0 8px;justify-content:space-between' }, h('b', { text: c + ' (' + g.length + '명)' }),
           h('span', { class: 'note', style: 'margin:0', text: '푼 문제 ' + seen + ' · 정답률 ' + (seen ? pct(right / seen) + '%' : '–') + ' · 완료 단원 ' + done + '개' })),
           h('div', { class: 'tscroll' }, h('table', { class: 'ttable' },
-            h('thead', {}, h('tr', {}, ['학생', '내 학기 진도', '푼 문제', '정답률', '완료 단원', '마지막 학습', '살펴볼 점'].map(x => h('th', { scope: 'col', text: x })))),
+            h('thead', {}, h('tr', {}, ['학생', '마지막 학습', '내 학기 진도', '푼 문제', '정답률', '완료 단원', '살펴볼 점'].map(x => h('th', { scope: 'col', text: x })))),
             h('tbody', {}, g.map(r => h('tr', { onclick: () => { tstate.sel = r.key; render(); window.scrollTo(0, 0); } },
-              h('td', {}, h('button', { class: 'tname', onclick: e => { e.stopPropagation(); tstate.sel = r.key; render(); window.scrollTo(0, 0); } }, h('b', { text: r.rep.name }), r.rep.sem != null ? semChip(r.rep.sem) : null, TD.hidden[r.key] ? h('span', { class: 'pill', text: '숨김' }) : null)),
-              h('td', { text: r.an.semTotal ? r.an.semLearned + '/' + r.an.semTotal : '–' }),
+              h('td', {}, h('button', { class: 'tname', onclick: e => { e.stopPropagation(); tstate.sel = r.key; render(); window.scrollTo(0, 0); } }, h('b', { text: r.rep.name }), TD.hidden[r.key] ? h('span', { class: 'pill', text: '숨김' }) : null)),
+              h('td', { class: 'last', text: sinceText(r.an) }),
+              h('td', { text: r.rep.sem != null ? SEM_LABELS[r.rep.sem] + (r.an.semTotal ? ' · ' + r.an.semLearned + '/' + r.an.semTotal : '') : '–' }),
               h('td', { text: r.an.seen ? r.an.seen + '문제' : '–' }),
               h('td', {}, accPill(r.an.acc)),
               h('td', { text: r.an.done ? r.an.done + '개' : '–' }),
-              h('td', { text: sinceText(r.an) }),
               h('td', {}, r.an.reasons.length ? r.an.reasons.map(x => h('span', { class: 'pill warn', text: x })) : h('span', { class: 'pill good', text: '양호' })))))))));
       });
     } else {
